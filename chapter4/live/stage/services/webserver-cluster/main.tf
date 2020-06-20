@@ -3,7 +3,10 @@ provider "aws" {
 }
 
 module "webserver_cluster" {
-    source = "../../../modules/services/webserver-cluster"
+    source = "../../../../modules/services/webserver-cluster"
+    # example of pull module from github using tag!  
+    # for some reason the double // after the base url is required
+    # source = "github.com/brikis98/terraform-up-and-running-code//code/terraform/04-terraform-module/module-example/modules/services/webserver-cluster?ref=v0.1.0"
 
     cluster_name = "webservers-stage"
     db_remote_state_bucket = "ballan-terraform-state"
