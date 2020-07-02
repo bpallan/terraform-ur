@@ -1,39 +1,3 @@
-locals {
-  http_port = 80
-  any_port = 0
-  any_protocol = "-1"
-  tcp_protocol = "tcp"
-  all_ips = ["0.0.0.0/0"]
-}
-
-data "aws_vpc" "default" {
-  default = true
-}
-
-data "aws_subnet_ids" "default" {
-  vpc_id = data.aws_vpc.default.id
-}
-
-data "terraform_remote_state" "db" {
-  backend = "s3"
-
-  config = {
-    bucket = var.db_remote_state_bucket
-    key = var.db_remote_state_key
-    region = "us-west-2"
-  }
-}
-
-data "template_file" "user_data" {
-  template = file("${path.module}/user-data.sh")
-
-  vars = {
-    server_port = var.server_port
-    db_address = data.terraform_remote_state.db.outputs.address
-    db_port = data.terraform_remote_state.db.outputs.port
-  }
-}
-
 resource "aws_launch_configuration" "example" {
   image_id               = "ami-0edf3b95e26a682df"
   instance_type          = var.instance_type
@@ -45,6 +9,16 @@ resource "aws_launch_configuration" "example" {
   # https://www.terraform.io/docs/providers/aws/r/launch_configuration.html
   lifecycle {
     create_before_destroy = true
+  }
+}
+
+data "template_file" "user_data" {
+  template = file("${path.module}/user-data.sh")
+
+  vars = {
+    server_port = var.server_port
+    db_address = data.terraform_remote_state.db.outputs.address
+    db_port = data.terraform_remote_state.db.outputs.port
   }
 }
 
@@ -73,6 +47,28 @@ resource "aws_autoscaling_group" "example" {
       propagate_at_launch = true
     }
   }
+}
+
+resource "aws_autoscaling_schedule" "scale_out_during_business_hours" {
+  count = var.enable_autoscaling ? 1 : 0
+
+  scheduled_action_name = "${var.cluster_name}-scale-out-during-business-hours"
+  min_size = 2
+  max_size = 10
+  desired_capacity = 3 # was 10 in example
+  recurrence = "0 9 * * *"
+  autoscaling_group_name = aws_autoscaling_group.example.name
+}
+
+resource "aws_autoscaling_schedule" "scale_in_at_night" {
+  count = var.enable_autoscaling ? 1 : 0
+
+  scheduled_action_name = "${var.cluster_name}-scale-in-at-night"
+  min_size = 2
+  max_size = 10
+  desired_capacity = 2 # was 2 in example
+  recurrence = "0 17 * * *"
+  autoscaling_group_name = aws_autoscaling_group.example.name
 }
 
 resource "aws_security_group" "instance" {
@@ -113,30 +109,6 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-resource "aws_security_group" "alb" {
-  name = "${var.cluster_name}-alb"  
-}
-
-resource "aws_security_group_rule" "allow_http_inbound" {
-  type = "ingress"
-  security_group_id = aws_security_group.alb.id
-
-  from_port = local.http_port
-  to_port = local.http_port
-  protocol = local.tcp_protocol
-  cidr_blocks = local.all_ips
-}
-
-resource "aws_security_group_rule" "allow_all_outbound" {
-  type = "egress"
-  security_group_id = aws_security_group.alb.id
-
-  from_port = local.any_port
-  to_port = local.any_port
-  protocol = local.any_protocol
-  cidr_blocks = local.all_ips
-}
-
 resource "aws_lb_target_group" "asg" {
   name      = var.cluster_name
   port      = var.server_port
@@ -169,13 +141,52 @@ resource "aws_lb_listener_rule" "asg" {
   }
 }
 
-terraform {
-    backend "s3" {
-        bucket = var.db_remote_state_bucket
-        key = var.db_remote_state_key
-        region = "us-west-2"
+resource "aws_security_group" "alb" {
+  name = "${var.cluster_name}-alb"  
+}
 
-        dynamodb_table = "ballan-locks"
-        encrypt = true
-    }
+resource "aws_security_group_rule" "allow_http_inbound" {
+  type = "ingress"
+  security_group_id = aws_security_group.alb.id
+
+  from_port = local.http_port
+  to_port = local.http_port
+  protocol = local.tcp_protocol
+  cidr_blocks = local.all_ips
+}
+
+resource "aws_security_group_rule" "allow_all_outbound" {
+  type = "egress"
+  security_group_id = aws_security_group.alb.id
+
+  from_port = local.any_port
+  to_port = local.any_port
+  protocol = local.any_protocol
+  cidr_blocks = local.all_ips
+}
+
+data "terraform_remote_state" "db" {
+  backend = "s3"
+
+  config = {
+    bucket = var.db_remote_state_bucket
+    key = var.db_remote_state_key
+    region = "us-west-2"
+  }
+}
+
+locals {
+  http_port = 80
+  any_port = 0
+  any_protocol = "-1"
+  tcp_protocol = "tcp"
+  all_ips = ["0.0.0.0/0"]
+}
+
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnet_ids" "default" {
+  vpc_id = data.aws_vpc.default.id
 }
