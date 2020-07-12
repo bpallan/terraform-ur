@@ -19,6 +19,9 @@ module "webserver_cluster" {
     # for some reason the double // after the base url is required
     # source = "github.com/brikis98/terraform-up-and-running-code//code/terraform/04-terraform-module/module-example/modules/services/webserver-cluster?ref=v0.1.0"
 
+    # ami = "some custom ami"
+    server_text = "Changing Server Text Again!"
+
     cluster_name = var.cluster_name
     db_remote_state_bucket = var.db_remote_state_bucket
     db_remote_state_key = var.db_remote_state_key
