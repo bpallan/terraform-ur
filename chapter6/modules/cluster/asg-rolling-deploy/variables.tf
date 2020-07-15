@@ -55,7 +55,7 @@ variable "target_group_arns" {
 variable "health_check_type" {
   description = "The type of health check to perform.  Must be one of: EC2, ELB."
   type = string
-  defaut = "EC2"
+  default = "EC2"
 }
 
 variable "user_data" {
